@@ -1,4 +1,7 @@
 import type {
+  PrizeWheelCanSpinContext,
+  PrizeWheelCanSpinController,
+  PrizeWheelCanSpinDecision,
   CreatePrizeWheelOptions,
   PrizeWheelInstance,
   PrizeWheelLeadPayload,
@@ -17,6 +20,7 @@ const DEFAULT_UTM_STORAGE_KEY = "proznanie-prize-wheel-utm";
 const DEFAULT_SPIN_DURATION_MS = 4600;
 const DEFAULT_SCROLL_TOP_OFFSET = 96;
 const fallbackAttemptStorage = new Map<string, string>();
+const fallbackPersistentStorage = new Map<string, string>();
 const OPTIONAL_NAME_LABEL = "Имя участника";
 const OPTIONAL_NAME_PLACEHOLDER = "Как к вам обращаться";
 
@@ -974,6 +978,22 @@ function removeAttemptStorageValue(key: string): void {
   }
 }
 
+function getPersistentStorageValue(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return fallbackPersistentStorage.get(key) ?? null;
+  }
+}
+
+function setPersistentStorageValue(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    fallbackPersistentStorage.set(key, value);
+  }
+}
+
 function getStoredResult<T>(key: string): T | null {
   const raw = getAttemptStorageValue(key);
   if (!raw) {
@@ -1281,6 +1301,50 @@ function sendYandexMetrikaGoal(
   return true;
 }
 
+function isCanSpinController(
+  value: CreatePrizeWheelOptions["canSpin"]
+): value is PrizeWheelCanSpinController {
+  return typeof value === "object" && value !== null && typeof value.canSpin === "function";
+}
+
+export const prizeWheelCanSpinPresets = {
+  oncePerSession(): PrizeWheelCanSpinController {
+    return {
+      canSpin: ({ agreed, spinning, hasSpun }) => ({
+        allowed: agreed && !spinning && !hasSpun
+      })
+    };
+  },
+  oncePerBrowser(options?: {
+    storageKey?: string;
+    blockedMessage?: string;
+  }): PrizeWheelCanSpinController {
+    const storageKey = options?.storageKey ?? "proznanie-prize-wheel-once-per-browser";
+    const blockedMessage = options?.blockedMessage;
+
+    return {
+      canSpin: ({ agreed, spinning, hasSpun }) => {
+        if (!agreed || spinning || hasSpun) {
+          return { allowed: false };
+        }
+
+        if (getPersistentStorageValue(storageKey) === "1") {
+          return {
+            allowed: false,
+            message: blockedMessage,
+            state: blockedMessage ? "error" : "idle"
+          };
+        }
+
+        return { allowed: true };
+      },
+      onSpin: () => {
+        setPersistentStorageValue(storageKey, "1");
+      }
+    };
+  }
+};
+
 export function createPrizeWheel(options: CreatePrizeWheelOptions): PrizeWheelInstance {
   ensureStyles();
   assertRequiredOptions(options);
@@ -1461,6 +1525,7 @@ export function createPrizeWheel(options: CreatePrizeWheelOptions): PrizeWheelIn
   const modalCard = modalCardNode;
   const modalClose = modalCloseNode;
   const title = titleNode;
+  const canSpinController = isCanSpinController(options.canSpin) ? options.canSpin : null;
 
   let currentRotation = 0;
   let spinning = false;
@@ -1585,10 +1650,65 @@ export function createPrizeWheel(options: CreatePrizeWheelOptions): PrizeWheelIn
     }
   }
 
+  function getCanSpinContext(): PrizeWheelCanSpinContext {
+    return {
+      agreed: agreementCheckbox.checked,
+      spinning,
+      hasSpun,
+      claimed,
+      participantName,
+      phone: phoneInput.value,
+      visitId,
+      currentResult
+    };
+  }
+
+  function getDefaultCanSpinDecision(context: PrizeWheelCanSpinContext): PrizeWheelCanSpinDecision {
+    if (context.spinning || context.hasSpun) {
+      return { allowed: false, state: "idle" };
+    }
+
+    if (!context.agreed) {
+      return {
+        allowed: false,
+        message: texts.agreementRequiredMessage,
+        state: "error"
+      };
+    }
+
+    return {
+      allowed: true,
+      message: texts.readyMessage,
+      state: "idle"
+    };
+  }
+
+  function resolveCanSpinDecision(): PrizeWheelCanSpinDecision {
+    const context = getCanSpinContext();
+    const canSpinResolver = typeof options.canSpin === "function" ? options.canSpin : null;
+    const customDecision = canSpinController ? canSpinController.canSpin(context) : canSpinResolver?.(context);
+
+    if (typeof customDecision === "boolean") {
+      return customDecision
+        ? { allowed: true, message: texts.readyMessage, state: "idle" }
+        : { allowed: false, state: "idle" };
+    }
+
+    if (customDecision) {
+      return {
+        allowed: customDecision.allowed,
+        message: customDecision.message,
+        state: customDecision.state ?? (customDecision.allowed ? "idle" : "error")
+      };
+    }
+
+    return getDefaultCanSpinDecision(context);
+  }
+
   function refreshButtonState(): void {
-    const agreed = agreementCheckbox.checked;
+    const spinDecision = resolveCanSpinDecision();
     const valid = isPhoneValid(phoneInput.value);
-    spinButton.disabled = !agreed || spinning || hasSpun;
+    spinButton.disabled = !spinDecision.allowed;
     claimButton.disabled = claiming || claimed || !currentResult || !valid;
     completedButton.disabled = true;
 
@@ -1608,12 +1728,12 @@ export function createPrizeWheel(options: CreatePrizeWheelOptions): PrizeWheelIn
       return;
     }
 
-    if (!agreed) {
+    if (!spinDecision.allowed) {
       setAttemptMessage("");
       return;
     }
 
-    setAttemptMessage(texts.readyMessage);
+    setAttemptMessage(spinDecision.message ?? texts.readyMessage, spinDecision.state ?? "idle");
   }
 
   async function emitLead(result: PrizeWheelResult): Promise<void> {
@@ -1685,17 +1805,18 @@ export function createPrizeWheel(options: CreatePrizeWheelOptions): PrizeWheelIn
   }
 
   async function spin(): Promise<PrizeWheelResult | null> {
-    if (spinning || hasSpun || !agreementCheckbox.checked) {
-      if (!agreementCheckbox.checked) {
-        setAttemptMessage(texts.agreementRequiredMessage, "error");
+    const spinDecision = resolveCanSpinDecision();
+    if (!spinDecision.allowed) {
+      if (spinDecision.message) {
+        setAttemptMessage(spinDecision.message, spinDecision.state ?? "error");
       }
-      refreshButtonState();
       return null;
     }
 
     spinning = true;
     hasSpun = true;
     setAttemptStorageValue(attemptStorageKey, "1");
+    canSpinController?.onSpin?.(getCanSpinContext());
     sendYandexMetrikaGoal(yandexMetrika, "spinStart", {
       visit_id: visitId
     });
@@ -1930,6 +2051,7 @@ export function createPrizeWheel(options: CreatePrizeWheelOptions): PrizeWheelIn
       agreementTracked = false;
       phoneInputTracked = false;
       viewTracked = false;
+      canSpinController?.onReset?.();
       if (viewRetryTimer !== null) {
         window.clearTimeout(viewRetryTimer);
         viewRetryTimer = null;

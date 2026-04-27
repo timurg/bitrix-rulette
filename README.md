@@ -1,4 +1,4 @@
-# Prize Wheel Library
+﻿# Prize Wheel Library
 
 Встраиваемая библиотека адаптивной рулетки для сайта.
 
@@ -193,3 +193,55 @@ rules: [
 ## Theme
 
 `theme` обязателен. Через него задаются основные цвета виджета, градиент сцены, цвета центральной кнопки и массив `sectorColors` для сегментов колеса.
+
+## canSpin
+
+`canSpin` можно передавать тремя способами:
+
+- не передавать совсем, тогда работает стандартное правило "один запуск за сессию после согласия";
+- передать свою лямбду `(context) => boolean | { allowed, message, state }`;
+- передать готовый controller с `canSpin`, `onSpin` и `onReset`.
+
+Из коробки доступны пресеты:
+
+- `prizeWheelCanSpinPresets.oncePerSession()`
+- `prizeWheelCanSpinPresets.oncePerBrowser()`
+
+Пример стандартного долговременного ограничения:
+
+```ts
+import { createPrizeWheel, prizeWheelCanSpinPresets } from "@proznanie/prize-wheel";
+
+createPrizeWheel({
+  target: "#lead-wheel",
+  canSpin: prizeWheelCanSpinPresets.oncePerBrowser({
+    storageKey: "proznanie-wheel-once-ever",
+    blockedMessage: "Колесо уже было запущено ранее на этом устройстве."
+  })
+});
+```
+
+Пример своей лямбды:
+
+```ts
+createPrizeWheel({
+  target: "#lead-wheel",
+  canSpin: ({ agreed, hasSpun, spinning }) => {
+    if (spinning || hasSpun) {
+      return { allowed: false };
+    }
+
+    if (!agreed) {
+      return {
+        allowed: false,
+        message: "Подтвердите согласие перед запуском.",
+        state: "error"
+      };
+    }
+
+    return { allowed: true };
+  }
+});
+```
+
+Примечание по `canSpin`: у `prizeWheelCanSpinPresets.oncePerBrowser()` текст `blockedMessage` по умолчанию не задается. Если нужен текст блокировки, передайте его явно.

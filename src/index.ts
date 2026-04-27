@@ -1,12 +1,14 @@
 export {
   createPrizeWheel,
-  defaultPrizes,
-  defaultRules,
-  normalizePhoneNumber
+  normalizePhoneNumber,
+  prizeWheelCanSpinPresets
 } from "./prize-wheel";
 
 export type {
   CreatePrizeWheelOptions,
+  PrizeWheelCanSpinContext,
+  PrizeWheelCanSpinController,
+  PrizeWheelCanSpinDecision,
   PrizeWheelInstance,
   PrizeWheelPrizeInput,
   PrizeWheelPrize,

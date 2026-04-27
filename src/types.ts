@@ -140,6 +140,29 @@ export interface PrizeWheelYandexMetrikaOptions {
   goals: PrizeWheelYandexMetrikaGoals;
 }
 
+export interface PrizeWheelCanSpinContext {
+  agreed: boolean;
+  spinning: boolean;
+  hasSpun: boolean;
+  claimed: boolean;
+  participantName: string;
+  phone: string;
+  visitId: string;
+  currentResult: PrizeWheelResult | null;
+}
+
+export interface PrizeWheelCanSpinDecision {
+  allowed: boolean;
+  message?: string;
+  state?: "idle" | "error";
+}
+
+export interface PrizeWheelCanSpinController {
+  canSpin: (context: PrizeWheelCanSpinContext) => boolean | PrizeWheelCanSpinDecision;
+  onSpin?: (context: PrizeWheelCanSpinContext) => void;
+  onReset?: () => void;
+}
+
 export interface CreatePrizeWheelOptions {
   target: string | HTMLElement;
   texts?: PrizeWheelTexts;
@@ -151,6 +174,9 @@ export interface CreatePrizeWheelOptions {
   leadTitle?: string | ((result: PrizeWheelResult) => string);
   initialPhone?: string;
   spinDurationMs?: number;
+  canSpin?:
+    | ((context: PrizeWheelCanSpinContext) => boolean | PrizeWheelCanSpinDecision)
+    | PrizeWheelCanSpinController;
   onLead?: (payload: PrizeWheelLeadPayload) => void | Promise<void>;
   onResult?: (result: PrizeWheelResult) => void | Promise<void>;
 }
