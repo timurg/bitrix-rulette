@@ -1,0 +1,37 @@
+{
+  "name": "@proznanie/prize-wheel",
+  "version": "0.1.0",
+  "description": "Embeddable adaptive prize wheel widget for lead generation.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs,iife --global-name ProznaniePrizeWheel --dts && node scripts/postbuild-bundles.mjs",
+    "dev": "tsup src/index.ts --format esm,cjs,iife --global-name ProznaniePrizeWheel --dts --watch"
+  },
+  "keywords": [
+    "widget",
+    "wheel",
+    "leadgen",
+    "crm",
+    "typescript"
+  ],
+  "devDependencies": {
+    "esbuild": "^0.25.11",
+    "tsup": "^8.3.5",
+    "typescript": "^5.9.3"
+  }
+}
