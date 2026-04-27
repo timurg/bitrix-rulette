@@ -185,34 +185,6 @@ rules: [
 - `spinStart` при фактическом запуске колеса
 - `claim` после успешного нажатия `Забрать приз`
 
-## PHP AJAX For Bitrix
-
-Готовый PHP-обработчик находится в:
-
-- `examples/php/bitrix-lead-handler.php`
-- `examples/php/bitrix-config.example.php`
-
-Что нужно сделать:
-
-1. Скопировать `examples/php/bitrix-config.example.php` в `examples/php/bitrix-config.php`
-2. Указать полный webhook Bitrix24 до метода `crm.lead.add.json`
-3. Указать `assigned_by_id` числовым `user id` Bitrix24, если нужно назначать ответственного
-4. Указать `source_id` как `WEB`, если лиды должны приходить с источником `Сайт`
-5. Отправлять `payload` из `onLead` в этот PHP-обработчик через `jQuery.ajax`
-
-PHP-обработчик:
-
-- принимает JSON или обычный POST в AJAX-режиме
-- валидирует телефон
-- отправляет лид в Bitrix24 по webhook
-- по умолчанию ставит `SOURCE_ID = WEB`, чтобы источник был `Сайт`
-- передает стандартные поля `UTM_SOURCE`, `UTM_MEDIUM`, `UTM_CAMPAIGN`, `UTM_CONTENT`, `UTM_TERM`, `UTM_ID`
-- добавляет `yclid`, `gclid`, `fbclid` в комментарий лида
-- не использует назначение ответственного из клиентского запроса
-- отключает показ ошибок и возвращает только JSON-ответ даже при внутренних исключениях
-
-UTM-метки автоматически попадают в `payload.utm`. Виджет забирает их из URL и хранит в `sessionStorage`, чтобы не потерять до момента отправки лида.
-
 ## Поведение
 
 - одна попытка на сессию хранится через `sessionStorage`
